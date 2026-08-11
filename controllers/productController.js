@@ -31,6 +31,44 @@ exports.getAllProducts = async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Lỗi server' }); }
 };
 
+//hàm lấy chi tiết sản phẩm
+exports.getProductById = async (req, res) => {
+    try {
+        const product = await Product.findOne({
+            where: { id: req.params.id },
+            include: [{ model: ProductVariant, as: 'variants' }]
+        });
+
+        if (!product) {
+            return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
+        }
+
+        // Tính toán lại giá Flash Sale cho sản phẩm chi tiết này
+        const prod = product.toJSON();
+        let activeDiscount = 0;
+        const now = new Date();
+
+        if (prod.discount > 0) {
+            const start = prod.discountStartDate ? new Date(prod.discountStartDate) : null;
+            const end = prod.discountEndDate ? new Date(prod.discountEndDate) : null;
+            let isValid = true;
+            if (start && now < start) isValid = false;
+            if (end && now > end) isValid = false;
+            if (isValid) activeDiscount = prod.discount;
+        }
+
+        prod.activeDiscount = activeDiscount;
+        prod.discountedPrice = activeDiscount > 0 
+            ? prod.price - (prod.price * (activeDiscount / 100)) 
+            : prod.price;
+
+        res.status(200).json(prod);
+    } catch (error) {
+        console.error("Lỗi khi lấy chi tiết sản phẩm:", error);
+        res.status(500).json({ message: 'Lỗi server' });
+    }
+};
+
 exports.createProduct = async (req, res) => {
     try {
         // Tạo sản phẩm và biến thể cùng lúc
