@@ -1,5 +1,6 @@
 const { Order } = require('../models');
 const PDFDocument = require('pdfkit');
+const path = require('path');
 
 exports.getAllOrders = async (req, res) => {
     try {
@@ -34,41 +35,42 @@ exports.exportPdf = async (req, res) => {
         const order = await Order.findByPk(req.params.id);
         if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
 
-        // Khởi tạo trang PDF
         const doc = new PDFDocument({ margin: 50 });
         
-        // Cấu hình header để báo cho Vue.js biết đây là file PDF tải về
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=HoaDon_${order.id}.pdf`);
         doc.pipe(res); 
 
-        // Vẽ nội dung (Dùng tiếng Việt không dấu để tránh lỗi font mặc định của PDFKit)
-        doc.fontSize(20).text('HOA DON MUA HANG', { align: 'center' });
+        const fontPath = path.join(__dirname, '../fonts/arial.ttf');
+        
+        doc.font(fontPath);
+
+        doc.fontSize(20).text('HÓA ĐƠN MUA HÀNG', { align: 'center' });
         doc.moveDown();
         
-        doc.fontSize(12).text(`Ma don hang: #${order.id}`);
-        doc.text(`Khach hang: ${order.customerName}`);
-        doc.text(`So dien thoai: ${order.phone}`);
-        doc.text(`Dia chi: ${order.address}`);
-        doc.text(`Ngay dat: ${order.createdAt}`);
+        doc.fontSize(12).text(`Mã đơn hàng: #${order.id}`);
+        doc.text(`Khách hàng: ${order.customerName}`);
+        doc.text(`Số điện thoại: ${order.phone}`);
+        doc.text(`Địa chỉ: ${order.address}`);
+        doc.text(`Ngày đặt: ${order.createdAt}`);
         doc.moveDown();
 
         doc.text('-'.repeat(50));
         doc.moveDown();
-        doc.text('Danh sach san pham:');
+        doc.text('Danh sách sản phẩm:');
         doc.moveDown(0.5);
         
         let items = [];
         try { items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items; } catch(e){}
         
         items.forEach(item => {
-            doc.text(`- ${item.name} (x${item.quantity}): ${item.price * item.quantity} VND`);
+            doc.text(`- ${item.name} (x${item.quantity}): ${item.price * item.quantity} VNĐ`);
         });
 
         doc.moveDown();
         doc.text('-'.repeat(50));
         doc.moveDown();
-        doc.fontSize(14).text(`TONG CONG: ${order.total} VND`, { align: 'right' });
+        doc.fontSize(14).text(`TỔNG CỘNG: ${order.total} VNĐ`, { align: 'right' });
 
         doc.end();
     } catch (error) {

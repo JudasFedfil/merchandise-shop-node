@@ -1,5 +1,6 @@
 const { Order } = require('../models');
 const PDFDocument = require('pdfkit');
+const path = require('path');
 
 exports.getRevenue = async (req, res) => {
     try {
@@ -103,21 +104,33 @@ exports.exportPdf = async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=BaoCaoDoanhThu.pdf`);
         doc.pipe(res);
 
-        doc.fontSize(20).text('BAO CAO DOANH THU', { align: 'center' });
+        const fontPath = path.join(__dirname, '../fonts/arial.ttf');
+        doc.font(fontPath);
+
+        // ĐỊNH DẠNG TIỀN TỆ
+        const formatMoney = (amount) => new Intl.NumberFormat('vi-VN').format(amount);
+
+        doc.fontSize(20).text('BÁO CÁO DOANH THU', { align: 'center' });
         doc.moveDown();
-        doc.fontSize(12).text(`Thoi gian: ${type === 'month' ? 'Thang ' + value : type === 'quarter' ? 'Quy ' + value : 'Nam'} nam ${year}`);
+        
+        let timeText = '';
+        if (type === 'month') timeText = `Tháng ${value}`;
+        else if (type === 'quarter') timeText = `Quý ${value}`;
+        else timeText = `Năm`;
+
+        doc.fontSize(12).text(`Thời gian: ${timeText} năm ${year}`);
         doc.moveDown();
         doc.text('-'.repeat(50));
         doc.moveDown();
 
-        doc.fontSize(14).text(`1. Figure Anime: ${cat1} VND`);
-        doc.text(`2. Gundam (Gunpla): ${cat2} VND`);
-        doc.text(`3. Merchandise: ${cat3} VND`);
+        doc.fontSize(14).text(`1. Figure Anime: ${formatMoney(cat1)} VNĐ`);
+        doc.text(`2. Gundam (Gunpla): ${formatMoney(cat2)} VNĐ`);
+        doc.text(`3. Merchandise: ${formatMoney(cat3)} VNĐ`);
         
         doc.moveDown();
         doc.text('-'.repeat(50));
         doc.moveDown();
-        doc.fontSize(16).text(`TONG DOANH THU: ${cat1 + cat2 + cat3} VND`, { align: 'right' });
+        doc.fontSize(16).text(`TỔNG DOANH THU: ${formatMoney(cat1 + cat2 + cat3)} VNĐ`, { align: 'right' });
 
         doc.end();
     } catch (error) {
