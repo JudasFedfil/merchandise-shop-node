@@ -1,4 +1,5 @@
 const { Order } = require('../models');
+const PDFDocument = require('pdfkit');
 
 exports.getRevenue = async (req, res) => {
     try {
@@ -57,5 +58,70 @@ exports.getRevenue = async (req, res) => {
     } catch (error) {
         console.error("Lỗi API thống kê:", error);
         res.status(500).json({ message: 'Lỗi khi tính toán thống kê' });
+    }
+};
+
+exports.exportPdf = async (req, res) => {
+    try {
+        const { type, value, year } = req.query;
+        const orders = await Order.findAll({ where: { status: 'completed' } });
+        
+        let cat1 = 0, cat2 = 0, cat3 = 0;
+        const reqValue = parseInt(value, 10);
+        const reqYear = parseInt(year, 10);
+
+        orders.forEach(o => {
+            if (!o.createdAt) return;
+            const dateParts = o.createdAt.split(' ')[0].split('/');
+            if (dateParts.length === 3) {
+                const oMonth = parseInt(dateParts[1], 10);
+                const oYear = parseInt(dateParts[2], 10);
+                const oQuarter = Math.floor((oMonth - 1) / 3) + 1;
+
+                let match = false;
+                if (type === 'month' && oMonth === reqValue && oYear === reqYear) match = true;
+                else if (type === 'quarter' && oQuarter === reqValue && oYear === reqYear) match = true;
+                else if (type === 'year' && oYear === reqYear) match = true;
+
+                if (match && o.items) {
+                    try {
+                        const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+                        items.forEach(item => {
+                            const lineTotal = Number(item.price || 0) * Number(item.quantity || 1);
+                            const catId = item.categoryId ? Number(item.categoryId) : 1; 
+                            if (catId === 1) cat1 += lineTotal;
+                            else if (catId === 2) cat2 += lineTotal;
+                            else if (catId === 3) cat3 += lineTotal;
+                        });
+                    } catch (e) {}
+                }
+            }
+        });
+
+        const doc = new PDFDocument({ margin: 50 });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=BaoCaoDoanhThu.pdf`);
+        doc.pipe(res);
+
+        doc.fontSize(20).text('BAO CAO DOANH THU', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).text(`Thoi gian: ${type === 'month' ? 'Thang ' + value : type === 'quarter' ? 'Quy ' + value : 'Nam'} nam ${year}`);
+        doc.moveDown();
+        doc.text('-'.repeat(50));
+        doc.moveDown();
+
+        doc.fontSize(14).text(`1. Figure Anime: ${cat1} VND`);
+        doc.text(`2. Gundam (Gunpla): ${cat2} VND`);
+        doc.text(`3. Merchandise: ${cat3} VND`);
+        
+        doc.moveDown();
+        doc.text('-'.repeat(50));
+        doc.moveDown();
+        doc.fontSize(16).text(`TONG DOANH THU: ${cat1 + cat2 + cat3} VND`, { align: 'right' });
+
+        doc.end();
+    } catch (error) {
+        console.error("Lỗi tạo PDF thống kê:", error);
+        res.status(500).json({ message: 'Lỗi tạo PDF' });
     }
 };
