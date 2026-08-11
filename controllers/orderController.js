@@ -1,4 +1,4 @@
-const { Order } = require('../models');
+const { Order, Product } = require('../models');
 const PDFDocument = require('pdfkit');
 const path = require('path');
 
@@ -12,15 +12,68 @@ exports.getAllOrders = async (req, res) => {
 exports.createOrder = async (req, res) => {
     try {
         const order = await Order.create(req.body);
+        
+        let items = [];
+        try { 
+            items = typeof req.body.items === 'string' ? JSON.parse(req.body.items) : req.body.items; 
+        } catch(e) {}
+        
+        for (const item of items) {
+            // Vue.js có thể gửi ID sản phẩm qua biến item.id hoặc item.productId
+            const productId = item.productId || item.id; 
+            if (productId) {
+                const product = await Product.findByPk(productId);
+                if (product) {
+                    // Trừ tồn kho (đảm bảo không bị âm) và cộng số lượng đã bán
+                    product.stock = Math.max(0, product.stock - item.quantity);
+                    product.sold = product.sold + item.quantity;
+                    await product.save();
+                }
+            }
+        }
+        
         res.status(201).json(order);
-    } catch (error) { res.status(500).json({ message: 'Lỗi tạo hóa đơn' }); }
+    } catch (error) { 
+        console.error("Lỗi tạo hóa đơn:", error);
+        res.status(500).json({ message: 'Lỗi tạo hóa đơn' }); 
+    }
 };
 
 exports.updateOrderStatus = async (req, res) => {
     try {
-        await Order.update({ status: req.body.status }, { where: { id: req.params.id } });
+        const order = await Order.findByPk(req.params.id);
+        if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+
+        const oldStatus = order.status;
+        const newStatus = req.body.status;
+
+        order.status = newStatus;
+        await order.save();
+
+        if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
+            let items = [];
+            try { 
+                items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items; 
+            } catch(e) {}
+            
+            for (const item of items) {
+                const productId = item.productId || item.id;
+                if (productId) {
+                    const product = await Product.findByPk(productId);
+                    if (product) {
+                        product.stock = product.stock + item.quantity;
+                        product.sold = Math.max(0, product.sold - item.quantity); 
+                        await product.save();
+                    }
+                }
+            }
+        }
+
         res.status(200).json({ message: 'Cập nhật trạng thái thành công' });
-    } catch (error) { res.status(500).json({ message: 'Lỗi cập nhật trạng thái' }); }
+    } catch (error) { 
+        console.error("Lỗi cập nhật trạng thái:", error);
+        res.status(500).json({ message: 'Lỗi cập nhật trạng thái' }); 
+    }
 };
 
 exports.deleteOrder = async (req, res) => {
